@@ -1,0 +1,66 @@
+package provide qfunit 1.0
+proc qf_create_menu {} {
+  global env ;
+  set scrdir $env(QFShare_plugin_dir) ;
+  set basedirs [glob -type d $scrdir/*] ;
+  
+  foreach eadir $basedirs {
+    set dirname [file tail $eadir] ;
+    set filelist($dirname) [glob -type f $eadir/*] ;
+    set menuname_id [lsearch -nocase -regexp $filelist($dirname) {menu.name}]
+    if {$menuname_id>=0} {
+      set fh [open $eadir/menu.name r]
+      set menuname($dirname) [lindex [split [read $fh] '\n'] 0] ;
+      close $fh ;
+      set filelist($dirname) [lreplace $filelist($dirname) $menuname_id $menuname_id]
+    } else {
+      set menuname($dirname) $dirname ;
+    }
+  }
+  
+  # build menu
+  set menu_top "QFShare"
+  if {[regexp {edi|inv} [qf_detect_tool]]} {
+    if {[regexp {qfmenu} [uiGet -menu]]} {
+      uiDelete qfmenu
+    }
+    uiAdd qfmenu -type menu -label $menu_top -in main ;
+  }
+  set i 0 ;
+  set j 0 ;
+  foreach itm [array names filelist] {
+    incr i ;
+    if {[regexp {edi|inv} [qf_detect_tool]]} {
+      uiAdd qfmenu_$i    -type submenu -label $menuname($itm) -in qfmenu ;
+    }
+    foreach subitm $filelist($itm) {
+      incr j ;
+      set submenuname [file tail $subitm] ;
+      set submenucmd  [file tail $subitm] ;
+      set fh [open $subitm r] ;
+      while {[gets $fh line]>0} {
+        if {[regexp -nocase {^(#|\")\s*menu.*:\s*([^(\(|\|)]*)((\||\()(.*)\)*){0,1}} $line tmpm tmpc tmpmenuname tmpone tmptwo tmpcmd]} {
+          set submenuname $tmpmenuname ;
+          puts $submenuname ;
+          if {[llength $tmpcmd]>0} {
+            set submenucmd $tmpcmd
+          }
+          break ;
+        }
+      }
+      close $fh ;
+      if {[regexp {icc} [qf_detect_tool]]} {
+      # for icc
+      catch {gui_delete_menu -root toplevel_layout_window_menuroot -menu "QFShare->$menuname($itm)->$submenuname"}
+      gui_create_menu \
+        -root toplevel_layout_window_menuroot \
+        -menu "QFShare->$menuname($itm)->$submenuname"  \
+        -tcl_cmd $submenucmd
+      } elseif {[regexp {edi|inv} [qf_detect_tool]]} {
+        uiAdd qfmenu_${i}_${j} -type command -label $submenuname -command $submenucmd -in qfmenu_${i}
+      }
+    }
+  }
+}
+
+# vim: ft=tcl

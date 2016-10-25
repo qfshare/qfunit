@@ -1,0 +1,26 @@
+#!/bin/sh
+# The next line is executed by /bin/sh, but not tcl \
+exec /proj/cadpnr/pds/dev/tcl/tclkit/8.6_rhel_6.5/bin/wish8.6 "$0" ${1+"$@"}
+
+# Load Standard Package
+set MFLOWPKG(bwidget) true ;
+source /proj/cadpnr/pds/flow/5.0/central/mPackages
+#wm withdraw .
+ wm title . "QFShare TK-BWidget" ;
+
+    proc mcmd_check_hard_macro {msg} {
+      tk_messageBox -message $msg ;
+    }
+set descmenu {
+  "&QFShare" all qfshare 0 {
+      {cascade "Floorplan"  {} floorplan 0 {
+        {command "Check Hard Macro" {} "Check Hard Macro" {} -command {mcmd_check_hard_macro "You Clicked a QFShare menu!" }
+      }
+  }
+}
+  }
+  }
+set mainframe [MainFrame .mainframe -height 550 -width 550 -separator both \
+    -menu         $descmenu ]
+ pack $mainframe -fill both -expand yes
+

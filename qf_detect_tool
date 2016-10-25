@@ -1,0 +1,23 @@
+package provide qfunit 1.0
+
+proc qf_detect_tool {} {
+  set lib [info library] ;
+  set noe [info nameofexecutable] ;
+  set lib_noe [concat $lib $noe] ;
+
+  if {[regexp -nocase {synopsys}  $lib_noe]} {
+    if {[regexp -nocase {icc2} $lib_noe]} {
+      return icc2
+    } elseif {[regexp -nocase {icc} $lib_noe]} {
+      return icc
+    }
+  } elseif {[regexp -nocase {cadence} $lib_noe]} {
+    if {[regexp -nocase {innovus} $lib_noe]} {
+      return inv
+    } elseif {[regexp -nocase {edi} $lib_noe]} {
+      return edi
+    }
+  }
+}
+
+# vim: ft=tcl
