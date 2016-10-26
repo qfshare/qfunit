@@ -1,6 +1,10 @@
 package provide qfunit 1.0
 proc qf_create_menu {} {
   global env ;
+  if {![info exists env(QFShare_plugin_dir)]} {
+    puts "Please define env(QFShare_plugin_dir) first." ;
+    return 0 ;
+  }
   set scrdir $env(QFShare_plugin_dir) ;
   set basedirs [glob -type d $scrdir/*] ;
   
@@ -10,7 +14,10 @@ proc qf_create_menu {} {
     set menuname_id [lsearch -nocase -regexp $filelist($dirname) {menu.name}]
     if {$menuname_id>=0} {
       set fh [open $eadir/menu.name r]
-      set menuname($dirname) [lindex [split [read $fh] '\n'] 0] ;
+      set tmpmenuname [lindex [split [read $fh] '\n'] 0] ;
+      if {[llength $tmpmenuname]>0} {
+        set menuname($dirname) $tmpmenuname ;
+      }
       close $fh ;
       set filelist($dirname) [lreplace $filelist($dirname) $menuname_id $menuname_id]
     } else {
