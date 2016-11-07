@@ -1,0 +1,48 @@
+package provide qfunit 1.0
+
+proc qf_get_proc_name {args} {
+  set ignore_procs "qf_puts"
+  set all_levels 0
+  if [string match "*-all*" $args] {
+    set all_levels 1
+  }
+  set level [lindex $args 0]
+  set proclist [file tail [info script]]
+  set start 1
+  set end [info level]
+  if {$end == 1} {
+    if {$proclist != ""} {
+      return $proclist
+    } else {
+      return "<interactive>"
+    }
+  } elseif {$end >= 2} {
+    incr end -1
+  }
+  for {set i $start} {$i<=$end} {incr i} {
+    set proc_name [lindex [info level $i] 0]
+    lappend proclist $proc_name
+  }
+  #if {!$all_levels} {
+  #  set proclist [lindex $proclist end]
+  #}
+  #puts "HERE: $proclist"
+  if {[lsearch -exact $ignore_procs [lindex [split $proclist ":::"] end]] >= 0} {
+    set proclist [lrange $proclist 0 [expr [llength $proclist] - 2]]
+  }
+  if {[lsearch -exact $ignore_procs [lindex $proclist end]] >= 0} {
+    set proclist [lrange $proclist 0 [expr [llength $proclist] - 2]]
+  }
+  #puts "HERE: $proclist"
+  set proclist_length [llength $proclist]
+  if {!$all_levels || (!$all_levels && $proclist_length > 2)} {
+    set proclist [lrange $proclist end end]
+    set proclist [join $proclist ":"]
+    regsub -all {:} $proclist {} proclist
+  } elseif {$all_levels && $proclist_length > 2} {
+    set proclist [lrange $proclist [expr $proclist_length - 2] end]
+    set proclist [join $proclist ":"]
+  }
+  return $proclist  
+}
+

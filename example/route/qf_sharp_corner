@@ -1,0 +1,225 @@
+package provide qfunit 1.0
+
+# menu: Sharp Corner | qf_sharp_corner
+
+# Main Proc start
+proc qf_sharp_corner {args} {
+
+uplevel #0 qf_info [subst {{Program function - sharp shapes when 2 shapes crossed . Version - $sysver ; Build - [mSysBuild $sysbuild]}}]
+# get the arguments
+qf_parse_proc_arguments -args $args alist ;
+set proc_name [lindex [lindex [split [info level 0] ":"] end] 0]
+uplevel #0 suppress_message UIAT-4
+uplevel #0 suppress_message HDUEDIT-104;
+uplevel #0 define_user_attribute -class shape -type string ${proc_name}_selected ;
+if {[info exist alist(-debug)]} {
+  pnrInfo "new attribute ${proc_name}_selected set to net shape" ;
+}
+# set hotkey with option
+if {[info exist alist(-hotkey)]} {
+  set hot_key [string index $alist(-hotkey) 0]
+  set tclcmd "$proc_name" ;
+  gui_start ;
+  gui_set_hotkey -hot_key Ctrl+$hot_key -tcl_cmd $tclcmd  -replace ;
+  pnrInfo "Hotkey set sucessfully - Ctrl+$hot_key for $proc_name]" ;
+  return ;
+}
+if {[info exist alist(-checkonly)]} {
+  #set FH [open mkySharpCorner.tcl w]
+}
+#@description:Auto check complex coditions for crossed shapes and sharp the corner.
+#@description:You should know that the program will sharp the short end, which means if you have a square shape, it is hard to decide how to sharp it.
+#@description:Support multiple shapes, like 3 shapes which have 2 crossed area and etc. See example below.
+#@description:### Usage
+#@description:</
+#@description:icc_shell >> source /proj/cadpnr/wa/lfli/MyMRVL/rls/mkySharpCorner
+#@description:icc_shell >> mkySharpCorner -hotkey e
+#@description:GUI >> select net shapes which are crossed
+#@description:GUI >> Ctrl+e
+#@description:/>
+# get the selection
+#set objs [get_selection] ;
+set_attribute -quiet [get_selection] ${proc_name}_selected 1 ;
+set sels_poly [convert_to_polygon [get_selection]]
+set rtn_poly $sels_poly
+set objs_polyand ""
+foreach_in_collection obj0 [get_selection] {
+  set poly0 [convert_to_polygon $obj0] ;
+  foreach_in_collection obj1 [get_selection] {
+    if {[get_object_name $obj0]==[get_object_name $obj1]} {
+      #pnrInfo "Same object: [get_object_name $obj0]" ;
+      continue ;
+    }
+    set poly1 [convert_to_polygon $obj1] ;
+    #puts "[get_object_name $obj0] ; [get_object_name $obj1]"
+    set poly_and [compute_polygon -bool and $poly0 $poly1] ;
+    if {[regexp {^0$} $poly_and] || [llength $poly_and]==0} {
+    } else {
+      lappend objs_polyand $poly_and ;
+    }
+  }
+}
+foreach p [lsort -u $objs_polyand] {
+  if {[llength $p]>0} {
+    lappend objs [filter_collection [get_net_shape -intersect $p ] "${proc_name}_selected==1"]
+  }
+}
+
+if {![info exist objs]} {
+  pnrWarn "Selected itmes not overlap" ;
+  return ;
+} elseif {[info exist alist(-debug)]} {
+  pnrInfo "objects: [get_object_name $objs]" ;
+}
+
+foreach obj01 $objs {
+  if {[llength $obj01]==0} {
+    continue ;
+  } else {
+    #puts "[get_object_name $obj01]"
+  }
+# determine the veritical and horizontal shape
+set obj0 [index_collection $obj01 0]
+set obj1 [index_collection $obj01 1]
+if {[pnrRectDirection [get_attribute $obj0 bbox]]=="v" && [pnrRectDirection [get_attribute $obj1 bbox]]=="h"} {
+  set objv $obj0 ;
+  set objh $obj1 ;
+} elseif {[pnrRectDirection [get_attribute $obj0 bbox]]=="h" && [pnrRectDirection [get_attribute $obj1 bbox]]=="v"} {
+  set objh $obj0 ;
+  set objv $obj1 ;
+} else {
+  #pnrWarn "Two overlap shapes have same direction : [get_object_name $obj01]" ;
+  lappend shapes_overlap $obj01 ;
+  continue ;
+}
+set_attribute -quiet $objv ${proc_name}_selected v ;
+set_attribute -quiet $objh ${proc_name}_selected h ;
+set polyh [mkyRectToPoly [get_attribute $objh bbox]]
+set polyv [mkyRectToPoly [get_attribute $objv bbox]]
+# get the width - xsize / height - ysize
+set widthv [pnrRectWidth [get_attribute $objv bbox]]
+set widthh [pnrRectWidth [get_attribute $objh bbox]]
+set heightv [pnrRectHeight [get_attribute $objv bbox]]
+set heighth [pnrRectHeight [get_attribute $objh bbox]]
+
+set newpolyv [resize_polygon -size_top $heighth -size_bottom $heighth $polyv]
+set newpolyh [resize_polygon -size_left $widthv -size_right $widthv $polyh]
+
+set andpoly [compute_polygon -bool and $newpolyv $newpolyh]
+set orpoly [compute_polygon -bool or $newpolyv $newpolyh]
+# all polygon is splited to 4 parts by common polygon
+set fourpoly [compute_polygon -bool not $orpoly $andpoly]
+
+# collect the max 2 area shape
+set max1_area 0 ;
+set max2_area 0 ;
+set fourrect [convert_from_polygon $fourpoly] ;
+foreach rect $fourrect {
+  set area [pnrRectArea $rect]
+  if {$area>$max1_area} {
+    set max1_area $area
+    set max1_rect $rect
+  }
+}
+set max1_index [lsearch $fourrect $max1_rect]
+set threerect [lreplace $fourrect $max1_index $max1_index]
+foreach rect $threerect {
+  set area [pnrRectArea $rect]
+  if {$area>$max2_area} {
+    set max2_area $area
+    set max2_rect $rect
+  }
+}
+
+set max1_poly [compute_polygon -bool or [mkyRectToPoly $max1_rect] $andpoly]
+set max2_poly [compute_polygon -bool or [mkyRectToPoly $max2_rect] $andpoly]
+# determin the direction of max 2 area polygon
+set max1_dir [pnrRectDirection [convert_from_polygon $max1_poly]]
+set max2_dir [pnrRectDirection [convert_from_polygon $max2_poly]]
+if {$max1_dir == "v"} {
+  set v_final [resize_polygon -size_top [expr 0-$heighth] -size_bottom [expr 0-$heighth] $max1_poly]
+  set h_final [resize_polygon -size_left [expr 0-$widthv] -size_right [expr 0-$widthv] $max2_poly]
+} else {
+  set h_final [resize_polygon -size_left [expr 0-$widthv] -size_right [expr 0-$widthv] $max1_poly]
+  set v_final [resize_polygon -size_top [expr 0-$heighth] -size_bottom [expr 0-$heighth] $max2_poly]
+}
+
+set rectv [pnrRectClear [convert_from_polygon [compute_polygon -bool or $v_final $andpoly]]]
+set recth [pnrRectClear [convert_from_polygon [compute_polygon -bool or $h_final $andpoly]]]
+
+set otherv [convert_to_polygon [filter_collection [get_selection] "${proc_name}_selected!=v"]] ;
+set otherh [convert_to_polygon [filter_collection [get_selection] "${proc_name}_selected!=h"]] ;
+set cutv [compute_polygon -bool not $polyv [mkyRectToPoly $rectv]] ;
+set cuth [compute_polygon -bool not $polyh [mkyRectToPoly $recth]] ;
+set extv [compute_polygon -bool not [mkyRectToPoly $rectv] $polyv] ;
+set exth [compute_polygon -bool not [mkyRectToPoly $recth] $polyh] ;
+if { ([regexp {^0$} $cutv] || [llength $cutv]==0) && ([regexp {^0$} $extv] || [llength $extv]==0)} {
+  #pnrInfo "vShape are good: [get_object_name $objv]" ;
+} else {
+  pnrInfo "vShape is not good or has multi-overlap area, will resize: [get_object_name $objv]" ;
+  set tmp [compute_polygon -bool and $otherv $cutv]
+  if { $tmp== 0 || [llength $tmp]==0} {
+    if {[info exist alist(-checkonly)]} {
+      set rtn_poly [compute_polygon -bool not $rtn_poly $cutv] ;
+      #puts $FH "resize_objects -bbox $rectv -no_snap $objv -ignore_fixed" ;
+    } else {
+      resize_objects -bbox $rectv -no_snap $objv -ignore_fixed
+    }
+  } else {
+    #pnrWarn "Cut area overlap with other shape, ignore." ;
+  }
+}
+if { ([regexp {^0$} $cuth] || [llength $cuth]==0) && ([regexp {^0$} $exth] || [llength $exth]==0)} {
+  #pnrInfo "hShape are good: [get_object_name $objh]" ;
+} else {
+  set tmp [compute_polygon -bool and $otherh $cuth]
+    pnrInfo "hShape is not good or has multi-overlap area, will resize: [get_object_name $objh]" ;
+  if { $tmp== 0 || [llength $tmp]==0} {
+    if {[info exist alist(-checkonly)]} {
+      set rtn_poly [compute_polygon -bool not $rtn_poly $cuth] ;
+      #puts $FH "resize_objects -bbox $recth -no_snap $objh -ignore_fixed"
+    } else {
+      resize_objects -bbox $recth -no_snap $objh -ignore_fixed
+    }
+  } else {
+    #pnrWarn "Cut area overlap with other shape, ignore." ;
+  }
+}
+if {[info exist alist(-checkonly)]} {
+  #close $FH ;
+  #pnrShowBoxes [convert_from_polygon [compute_polygon -bool or $rtn_poly $rtn_poly]] -color green
+  #pnrShowBoxes [convert_from_polygon [compute_polygon -bool not $sels_poly $rtn_poly]]
+}
+
+}
+
+set_attribute -quiet $objs ${proc_name}_selected 0 ;
+if {[info exist shapes_overlap]} {
+  pnrWarn "Below shapes have same direction, no cross"
+  puts -nonewline "|" ;
+    foreach itm $shapes_overlap {
+      puts -nonewline " [get_object_name $itm] |"
+    }
+    puts "" ;
+  set_attribute -quiet $objs ${proc_name}_selected 0 ;
+  pnrInfo "Try again."
+}
+uplevel #0 unsuppress_message UIAT-4
+uplevel #0 unsuppress_message HDUEDIT-104;
+return 1 ;
+#@description:### Sample
+#@description:<Sample|mkySharpCorner_sample1.gif>
+}
+qf_define_proc_arguments qf_sharp_corner -info "Sharp the corner when 2 shapes crossed." \
+  -define_args {
+    {-checkonly  "Print out check message only, not change database " "" boolean optional}
+    {-debug      "in debug mode" "" boolean optional}
+    {-hotkey     "hot key setting with ctrl" "" string optional}
+  }
+
+# Main Proc end
+
+# WOrk wIth setting in .vimrc - "set modeline modelines=8"
+# vim: syntax=tcl
+# vim: filetype=pnr
+# vim: foldmethod=marker

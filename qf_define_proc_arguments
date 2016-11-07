@@ -1,0 +1,6 @@
+package provide qfunit 1.0
+if {[regexp icc qf_detect_tool]} {
+  interp alias {} qf_define_proc_arguments {} define_proc_attributes
+} elseif {[regexp {innovus|edi|encouter|inv}]} {
+  interp alias {} qf_define_proc_arguments {} define_proc_arguments
+}

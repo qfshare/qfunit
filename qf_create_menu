@@ -1,16 +1,16 @@
 package provide qfunit 1.0
 proc qf_create_menu {} {
   global env ;
-  if {![info exists env(QFShare_plugin_dir)]} {
-    puts "Please define env(QFShare_plugin_dir) first." ;
+  if {![info exists env(QFUnit_plugin_dir)]} {
+    puts "Please define env(QFUnit_plugin_dir) first." ;
     return 0 ;
   }
-  set scrdir $env(QFShare_plugin_dir) ;
+  set scrdir $env(QFUnit_plugin_dir) ;
   set basedirs [glob -type d $scrdir/*] ;
   
   foreach eadir $basedirs {
     set dirname [file tail $eadir] ;
-    set filelist($dirname) [glob -type f $eadir/*] ;
+    set filelist($dirname) [glob -nocomplain -types f $eadir/*] ;
     set menuname_id [lsearch -nocase -regexp $filelist($dirname) {menu.name}]
     if {$menuname_id>=0} {
       set fh [open $eadir/menu.name r]
@@ -26,7 +26,13 @@ proc qf_create_menu {} {
   }
   
   # build menu
-  set menu_top "QFShare"
+  set menu_top "" ;
+  if {[info exists env(QFUnit_menu_name)]} {
+    set menu_top $env(QFUnit_menu_name)
+  }
+  if {[llength $menu_top]==0} {
+    set menu_top "QFUnit"
+  }
   if {[regexp {edi|inv} [qf_detect_tool]]} {
     if {[regexp {qfmenu} [uiGet -menu]]} {
       uiDelete qfmenu
@@ -45,10 +51,10 @@ proc qf_create_menu {} {
       set submenuname [file tail $subitm] ;
       set submenucmd  [file tail $subitm] ;
       set fh [open $subitm r] ;
-      while {[gets $fh line]>0} {
-        if {[regexp -nocase {^(#|\")\s*menu.*:\s*([^(\(|\|)]*)((\||\()(.*)\)*){0,1}} $line tmpm tmpc tmpmenuname tmpone tmptwo tmpcmd]} {
+      while {[gets $fh line]>=0} {
+        if {[regexp -nocase {^(#|\")\s*menu.*:\s*([^(\(\|)]*)((\||\()(.*)\)*){0,1}} $line tmpm tmpc tmpmenuname tmpone tmptwo tmpcmd]} {
           set submenuname $tmpmenuname ;
-          puts $submenuname ;
+          #puts $submenuname ;
           if {[llength $tmpcmd]>0} {
             set submenucmd $tmpcmd
           }
@@ -58,10 +64,10 @@ proc qf_create_menu {} {
       close $fh ;
       if {[regexp {icc} [qf_detect_tool]]} {
       # for icc
-      catch {gui_delete_menu -root toplevel_layout_window_menuroot -menu "QFShare->$menuname($itm)->$submenuname"}
+      catch {gui_delete_menu -root toplevel_layout_window_menuroot -menu "$menu_top->$menuname($itm)->$submenuname"}
       gui_create_menu \
         -root toplevel_layout_window_menuroot \
-        -menu "QFShare->$menuname($itm)->$submenuname"  \
+        -menu "$menu_top->$menuname($itm)->$submenuname"  \
         -tcl_cmd $submenucmd
       } elseif {[regexp {edi|inv} [qf_detect_tool]]} {
         uiAdd qfmenu_${i}_${j} -type command -label $submenuname -command $submenucmd -in qfmenu_${i}
